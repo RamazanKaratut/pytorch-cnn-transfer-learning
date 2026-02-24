@@ -6,6 +6,7 @@ from torchvision import datasets, transforms, models
 import matplotlib.pyplot as plt
 import time
 import warnings
+from tqdm import tqdm  # İlerleme çubuğu kütüphanesi eklendi
 
 # Her türlü sinir bozucu terminal uyarısını tamamen susturur
 warnings.filterwarnings("ignore")
@@ -17,7 +18,6 @@ transform = transforms.Compose([
     transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 ])
 
-# Demo amaçlı hızlı sürmesi için train setinin sadece bir kısmını kullanabilirsin, ama tam set bırakıyorum.
 train_dataset = datasets.CIFAR10(root='./data', train=True, download=True, transform=transform)
 test_dataset = datasets.CIFAR10(root='./data', train=False, download=True, transform=transform)
 
@@ -39,9 +39,11 @@ def get_resnet50(mode="feature_extraction", num_classes=10):
     model.fc = nn.Linear(num_ftrs, num_classes)
     return model
 
-# --- 3. Ortak Eğitim Motoru (Early Stopping Eklendi) ---
+# --- 3. Ortak Eğitim Motoru (Early Stopping ve TQDM Eklendi) ---
 def train_model(model, optimizer, criterion, device, epochs, name, patience=3):
-    print(f"\n--- {name} Eğitimi Başlıyor ---")
+    print(f"\n{'='*50}")
+    print(f"--- {name} Eğitimi Başlıyor ---")
+    print(f"{'='*50}")
     model.to(device)
     history = []
     
@@ -52,7 +54,10 @@ def train_model(model, optimizer, criterion, device, epochs, name, patience=3):
         start_time = time.time()
         model.train()
         
-        for inputs, labels in train_loader:
+        # Train loader'ı tqdm ile sarmalıyoruz
+        train_loop = tqdm(train_loader, desc=f"Epoch {epoch+1:02d}/{epochs} [Eğitim]", leave=False)
+        
+        for inputs, labels in train_loop:
             inputs, labels = inputs.to(device), labels.to(device)
             optimizer.zero_grad()
             outputs = model(inputs)
@@ -60,11 +65,18 @@ def train_model(model, optimizer, criterion, device, epochs, name, patience=3):
             loss.backward()
             optimizer.step()
             
-        # Test
+            # Progress bar'ın yanına anlık loss değerini yazdır
+            train_loop.set_postfix(loss=loss.item())
+            
+        # Test Aşaması
         model.eval()
         correct, total = 0, 0
+        
+        # Test loader'ı da tqdm ile sarmalıyoruz
+        test_loop = tqdm(test_loader, desc=f"Epoch {epoch+1:02d}/{epochs} [Test  ]", leave=False)
+        
         with torch.no_grad():
-            for inputs, labels in test_loader:
+            for inputs, labels in test_loop:
                 inputs, labels = inputs.to(device), labels.to(device)
                 outputs = model(inputs)
                 _, predicted = outputs.max(1)
@@ -73,6 +85,8 @@ def train_model(model, optimizer, criterion, device, epochs, name, patience=3):
                 
         epoch_acc = 100. * correct / total
         history.append(epoch_acc)
+        
+        # O epoch'un özetini kalıcı olarak yazdır
         print(f"Epoch {epoch+1:02d}/{epochs} | Test Acc: {epoch_acc:.2f}% | Süre: {(time.time()-start_time):.1f} sn")
         
         # --- EARLY STOPPING KONTROLÜ ---
@@ -86,7 +100,7 @@ def train_model(model, optimizer, criterion, device, epochs, name, patience=3):
             print(f"-> [DİKKAT] Early Stopping tetiklendi! {patience} epoch boyunca gelişme olmadı.")
             break
             
-    print(f"{name} Eğitimi Tamamlandı. En İyi Başarı: {best_acc:.2f}%")
+    print(f"\n{name} Eğitimi Tamamlandı. En İyi Başarı: {best_acc:.2f}%")
     return history
 
 # --- 4. Ana Çalıştırma Döngüsü ---
@@ -94,27 +108,23 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Kullanılan Cihaz: {device}")
     
-    # Early stopping olduğu için maksimum epoch sınırını rahatça yüksek tutabiliriz
     epochs = 15 
     criterion = nn.CrossEntropyLoss()
     results = {}
 
     # DENEY 1: Feature Extraction
     model_fe = get_resnet50(mode="feature_extraction")
-    # Sadece 'fc' parametreleri optimize edilir
     optimizer_fe = optim.Adam(model_fe.fc.parameters(), lr=0.001)
     results['Feature Extraction'] = train_model(model_fe, optimizer_fe, criterion, device, epochs, "Feature Extraction", patience=3)
 
     # DENEY 2: Full Fine-Tuning
     model_ft = get_resnet50(mode="fine_tuning")
-    # Tüm ağ optimize edilir ama LR çok küçük tutulur (Örn: 1e-4)
     optimizer_ft = optim.Adam(model_ft.parameters(), lr=1e-4)
     results['Full Fine-Tuning'] = train_model(model_ft, optimizer_ft, criterion, device, epochs, "Full Fine-Tuning", patience=3)
 
     # Grafik Çizimi
     plt.figure(figsize=(10, 5))
     for name, acc_list in results.items():
-        # X eksenini her modelin kendi çalıştığı epoch sayısına göre ayarla
         plt.plot(range(1, len(acc_list) + 1), acc_list, label=f"{name} (Final: {acc_list[-1]:.2f}%)", marker='o')
         
     plt.title('Transfer Learning: Feature Extraction vs Full Fine-Tuning')
