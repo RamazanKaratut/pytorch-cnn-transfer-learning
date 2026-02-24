@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import time
 import warnings
 
+# Her türlü sinir bozucu terminal uyarısını tamamen susturur
 warnings.filterwarnings("ignore")
 
 # --- 1. Veri Hazırlama ve Augmentation ---
@@ -91,12 +92,16 @@ def main():
     model = CustomCNN().to(device)
     criterion = nn.CrossEntropyLoss()
     
-    # %85+ için güçlü bir optimizer ve scheduler ayarı
     optimizer = optim.SGD(model.parameters(), lr=0.1, momentum=0.9, weight_decay=5e-4)
-    epochs = 30
+    epochs = 40 # Early stopping eklediğimiz için epoch sayısını rahatça artırabiliriz
     scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
     
     history = {'train_loss': [], 'test_acc': []}
+    
+    # --- EARLY STOPPING AYARLARI ---
+    patience = 7  # 7 epoch boyunca test başarısı artmazsa durdur
+    best_acc = 0.0
+    epochs_no_improve = 0
     
     print("\n--- Custom CNN Eğitimi Başlıyor ---")
     start_time = time.time()
@@ -135,7 +140,21 @@ def main():
         
         print(f"Epoch {epoch+1:02d}/{epochs} | Train Loss: {epoch_loss:.4f} | Test Acc: {epoch_acc:.2f}% | LR: {scheduler.get_last_lr()[0]:.5f}")
         
-    print(f"Eğitim Bitti! Toplam Süre: {(time.time() - start_time)/60:.1f} dakika.")
+        # --- EARLY STOPPING KONTROLÜ ---
+        if epoch_acc > best_acc:
+            best_acc = epoch_acc
+            epochs_no_improve = 0
+            # En iyi modeli kaydet (İsteğe bağlı)
+            # torch.save(model.state_dict(), 'best_custom_cnn.pth')
+        else:
+            epochs_no_improve += 1
+            
+        if epochs_no_improve >= patience:
+            print(f"\n[DİKKAT] Erken Durdurma (Early Stopping) tetiklendi! {patience} epoch boyunca iyileşme olmadı.")
+            break
+        
+    print(f"\nEğitim Bitti! En İyi Test Başarısı: {best_acc:.2f}%")
+    print(f"Toplam Süre: {(time.time() - start_time)/60:.1f} dakika.")
     
     # Grafik Çizimi
     plt.figure(figsize=(10, 5))

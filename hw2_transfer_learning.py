@@ -5,6 +5,10 @@ from torch.utils.data import DataLoader
 from torchvision import datasets, transforms, models
 import matplotlib.pyplot as plt
 import time
+import warnings
+
+# Her türlü sinir bozucu terminal uyarısını tamamen susturur
+warnings.filterwarnings("ignore")
 
 # --- 1. Veri Hazırlama (ResNet50 için 224x224) ---
 transform = transforms.Compose([
@@ -35,11 +39,14 @@ def get_resnet50(mode="feature_extraction", num_classes=10):
     model.fc = nn.Linear(num_ftrs, num_classes)
     return model
 
-# --- 3. Ortak Eğitim Motoru ---
-def train_model(model, optimizer, criterion, device, epochs, name):
+# --- 3. Ortak Eğitim Motoru (Early Stopping Eklendi) ---
+def train_model(model, optimizer, criterion, device, epochs, name, patience=3):
     print(f"\n--- {name} Eğitimi Başlıyor ---")
     model.to(device)
     history = []
+    
+    best_acc = 0.0
+    epochs_no_improve = 0
     
     for epoch in range(epochs):
         start_time = time.time()
@@ -68,6 +75,18 @@ def train_model(model, optimizer, criterion, device, epochs, name):
         history.append(epoch_acc)
         print(f"Epoch {epoch+1:02d}/{epochs} | Test Acc: {epoch_acc:.2f}% | Süre: {(time.time()-start_time):.1f} sn")
         
+        # --- EARLY STOPPING KONTROLÜ ---
+        if epoch_acc > best_acc:
+            best_acc = epoch_acc
+            epochs_no_improve = 0
+        else:
+            epochs_no_improve += 1
+            
+        if epochs_no_improve >= patience:
+            print(f"-> [DİKKAT] Early Stopping tetiklendi! {patience} epoch boyunca gelişme olmadı.")
+            break
+            
+    print(f"{name} Eğitimi Tamamlandı. En İyi Başarı: {best_acc:.2f}%")
     return history
 
 # --- 4. Ana Çalıştırma Döngüsü ---
@@ -75,7 +94,8 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Kullanılan Cihaz: {device}")
     
-    epochs = 5
+    # Early stopping olduğu için maksimum epoch sınırını rahatça yüksek tutabiliriz
+    epochs = 15 
     criterion = nn.CrossEntropyLoss()
     results = {}
 
@@ -83,18 +103,20 @@ def main():
     model_fe = get_resnet50(mode="feature_extraction")
     # Sadece 'fc' parametreleri optimize edilir
     optimizer_fe = optim.Adam(model_fe.fc.parameters(), lr=0.001)
-    results['Feature Extraction'] = train_model(model_fe, optimizer_fe, criterion, device, epochs, "Feature Extraction")
+    results['Feature Extraction'] = train_model(model_fe, optimizer_fe, criterion, device, epochs, "Feature Extraction", patience=3)
 
     # DENEY 2: Full Fine-Tuning
     model_ft = get_resnet50(mode="fine_tuning")
     # Tüm ağ optimize edilir ama LR çok küçük tutulur (Örn: 1e-4)
     optimizer_ft = optim.Adam(model_ft.parameters(), lr=1e-4)
-    results['Full Fine-Tuning'] = train_model(model_ft, optimizer_ft, criterion, device, epochs, "Full Fine-Tuning")
+    results['Full Fine-Tuning'] = train_model(model_ft, optimizer_ft, criterion, device, epochs, "Full Fine-Tuning", patience=3)
 
     # Grafik Çizimi
     plt.figure(figsize=(10, 5))
     for name, acc_list in results.items():
-        plt.plot(acc_list, label=f"{name} (Final: {acc_list[-1]:.2f}%)", marker='o')
+        # X eksenini her modelin kendi çalıştığı epoch sayısına göre ayarla
+        plt.plot(range(1, len(acc_list) + 1), acc_list, label=f"{name} (Final: {acc_list[-1]:.2f}%)", marker='o')
+        
     plt.title('Transfer Learning: Feature Extraction vs Full Fine-Tuning')
     plt.xlabel('Epoch')
     plt.ylabel('Test Accuracy (%)')
