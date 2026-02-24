@@ -5,6 +5,9 @@ from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
 import matplotlib.pyplot as plt
 import time
+import warnings
+
+warnings.filterwarnings("ignore")
 
 # --- 1. Veri Hazırlama ve Augmentation ---
 transform_train = transforms.Compose([
