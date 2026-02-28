@@ -22,7 +22,7 @@ Transfer Learning, büyük veri setlerinde (ImageNet) eğitilmiş devasa modelle
    * Ağın tamamı eğitime açık bırakılmış ancak önceden öğrenilmiş ağırlıkları "bozmamak" adına çok düşük bir Learning Rate (`1e-4`) kullanılmıştır.
    * *Neden?* Model sadece son katmanı değil, kendi evrişim filtrelerini de uçak, kedi, köpek (CIFAR-10) görsellerine spesifik olacak şekilde ufak ufak günceller. Genellikle en yüksek başarıyı bu yöntem verir ancak yüksek işlem gücü gerektirir.
 
-*(Transfer Learning grafiği yakında eklenecektir)*
+![Transfer Learning Sonuç](hw2_transfer_learning.png)
 
 ## 💻 Kurulum ve Çalıştırma
 Projeyi çalıştırmak için öncelikle gerekli kütüphaneleri yükleyin:
