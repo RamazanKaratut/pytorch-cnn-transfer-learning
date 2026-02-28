@@ -39,7 +39,7 @@ def get_resnet50(mode="feature_extraction", num_classes=10):
     model.fc = nn.Linear(num_ftrs, num_classes)
     return model
 
-# --- 3. Ortak Eğitim Motoru (Early Stopping ve TQDM Eklendi) ---
+# --- 3. Ortak Eğitim Motoru ---
 def train_model(model, optimizer, criterion, device, epochs, name, patience=3):
     print(f"\n{'='*50}")
     print(f"--- {name} Eğitimi Başlıyor ---")
